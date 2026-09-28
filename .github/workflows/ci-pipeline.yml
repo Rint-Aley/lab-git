@@ -9,22 +9,15 @@ on:
 jobs:
   trufflehog:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: TruffleHog Filesystem Scan
-        id: trufflehog
+      - name: TruffleHog
         uses: trufflesecurity/trufflehog@main
-        continue-on-error: true
         with:
           path: ./
-          extra_args: --debug --results=verified,unknown
-
-      - name: Fail if secrets found
-        if: steps.trufflehog.outcome == 'failure'
-        run: |
-          echo "::error::TruffleHog found secrets in this PR!"
-          exit 1
+          extra_args: --results=verified,unverified,unknown --fail
