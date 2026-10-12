@@ -1,0 +1,5 @@
+---
+app_source_dir: "{{ playbook_dir | dirname }}"
+app_deploy_dir: /opt/people-app
+compose_project_name: people-app
+app_host_port: 8080
