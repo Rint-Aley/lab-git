@@ -1,0 +1,105 @@
+---
+- name: Configure Docker and deploy People Management to the Ubuntu VM
+  hosts: all
+  become: yes
+  vars_files:
+    - vars.yml
+
+  tasks:
+    - name: Update apt cache and install prerequisites
+      apt:
+        name:
+          - apt-transport-https
+          - ca-certificates
+          - curl
+          - gnupg
+          - lsb-release
+        state: present
+        update_cache: yes
+
+    - name: Create directory for Docker GPG key
+      file:
+        path: /etc/apt/keyrings
+        state: directory
+        mode: '0755'
+
+    - name: Download Docker official GPG key
+      get_url:
+        url: https://download.docker.com/linux/ubuntu/gpg
+        dest: /etc/apt/keyrings/docker.asc
+        mode: '0644'
+
+    - name: Add Docker repository to APT sources
+      apt_repository:
+        repo: "deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable"
+        state: present
+        filename: docker
+
+    - name: Install Docker Engine and Docker Compose plugin
+      apt:
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+          - docker-buildx-plugin
+          - docker-compose-plugin
+        state: present
+        update_cache: yes
+
+    - name: Ensure Docker service is started and enabled
+      systemd:
+        name: docker
+        state: started
+        enabled: yes
+
+    - name: Add current ansible user to the docker group
+      user:
+        name: "{{ ansible_user }}"
+        groups: docker
+        append: yes
+
+    - name: Create deployment directory
+      ansible.builtin.file:
+        path: "{{ app_deploy_dir }}"
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+
+    - name: Copy backend source and Docker build files
+      ansible.builtin.copy:
+        src: "{{ app_source_dir }}/backend/"
+        dest: "{{ app_deploy_dir }}/backend/"
+        owner: root
+        group: root
+        directory_mode: '0755'
+      register: backend_copy
+
+    - name: Copy frontend source and Nginx configuration
+      ansible.builtin.copy:
+        src: "{{ app_source_dir }}/frontend/"
+        dest: "{{ app_deploy_dir }}/frontend/"
+        owner: root
+        group: root
+        directory_mode: '0755'
+      register: frontend_copy
+
+    - name: Copy Docker Compose configuration
+      ansible.builtin.copy:
+        src: "{{ app_source_dir }}/compose.yaml"
+        dest: "{{ app_deploy_dir }}/compose.yaml"
+        owner: root
+        group: root
+        mode: '0644'
+      register: compose_copy
+
+    - name: Build or update the Compose application
+      community.docker.docker_compose_v2:
+        project_src: "{{ app_deploy_dir }}"
+        project_name: "{{ compose_project_name }}"
+        state: present
+        build: always
+        pull: missing
+        recreate: auto
+        remove_orphans: false
+      register: compose_deployment
